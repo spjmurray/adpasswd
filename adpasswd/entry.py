@@ -1,204 +1,19 @@
-from datetime import datetime, timedelta
-import json
-import logging
-import os
-import re
-import subprocess
-import sys
-import tempfile
-from pkg_resources import resource_filename
+"""
+Placeholder
+"""
 
-from dns import resolver
+from datetime import datetime, timedelta
+import logging
+import sys
+
 import gtk
 import gobject
+from pkg_resources import resource_filename
 
-
-class KerberosTicket(object):
-    """
-    Container around a Kerberos ticket
-    'issued' and 'expires' are python datetime objects
-    """
-
-    def __init__(self, issued, expires, principal):
-        self.issued = issued
-        self.exipres = expires
-        self.principal = principal
-
-    @property
-    def service(self):
-        return self.principal.split('@')[0]
-
-    @property
-    def realm(self):
-        return self.principal.split('@')[1]
-
-
-class KerberosTickets(object):
-    """
-    Manages Kerberos tickets on the system
-    """
-
-    def __init__(self, realm, username, password):
-        self.realm = realm
-        self.username = username
-        self.password = password
-        self.tickets = []
-        self.date_format = '%b %d %H:%M:%S %Y'
-
-    def klist(self):
-        """
-        Lists active tickets on the system, clients need to manually
-        check the ticket list to interrogate success state
-        """
-
-        # Reset the tickets we know about
-        self.tickets = []
-
-        # Run klist to grab the current tickets the system knows about
-        command = ['/usr/bin/klist']
-        try:
-            output = subprocess.check_output(command)
-        except subprocess.CalledProcessError as error:
-            logging.warn('Call to klist failed')
-            return
-
-        # Parse existing tickets discarding any expired ones e.g.
-        # Jan 10 15:48:00 2018  >>>Expired<<<  krbtgt/CORP.COUCHBASE.COM@CORP.COUCHBASE.COM
-        entries = output.split("\n")[4:-1]
-        for entry in entries:
-            issued, expires, principal = re.split(r'\s{2,}', entry)
-            issued = datetime.strptime(issued, self.date_format)
-            try:
-                expires = datetime.strptime(expires, self.date_format)
-            except ValueError:
-                # This effectively ignores tickets that have expired
-                continue
-            ticket = KerberosTicket(issued, expires, principal)
-            self.tickets.append(ticket)
-
-        if not len(self.tickets):
-            logging.info('No active tickets found')
-
-
-    def kinit(self):
-        """
-        Get a new TGT from the KDC
-        """
-
-        # Sadly kinit communicates via /dev/tty so we cannot use
-        # Popen.communicate, but it does support a file path...
-        password = tempfile.NamedTemporaryFile()
-        password.write(self.password)
-        password.flush()
-
-        principal = self.username + '@' + self.realm
-        command = ['/usr/bin/kinit', '--enterprise', '--password-file=' + password.name, principal]
-
-        try:
-            subprocess.check_call(command)
-        except subprocess.CalledProcessError:
-            logging.warn('Call to kinit failed')
-
-
-    def has_tgt(self):
-        """
-        Do we have a valid TGT?
-        """
-
-        return any(t.service.startswith('krbtgt/') for t in self.tickets)
-
-
-class DNS(object):
-    """
-    Helper for DNS related functions
-    """
-
-    @staticmethod
-    def get_services(service, protocol, domain):
-        # See RFC 2782
-        srv = '_' + service + '._' + protocol + '.' + domain
-
-        # Get all resources for the service
-        dns = resolver.Resolver()
-        res = dns.query(srv, 'SRV')
-
-        # For now just return the host name, which is required by GSS binding
-        # to LDAP
-        return [x.target.to_text(omit_final_dot=True) for x in res]
-
-
-class Configuration(object):
-    """
-    Basic configuration cache and persistence abstraction
-    """
-
-    def __init__(self):
-        self.realm = ''
-        self.username = ''
-        self.password = ''
-
-        self.confdir = os.environ['HOME'] + '/.adpasswd'
-        self.conffile = self.confdir + '/' + 'config.json'
-
-        if not os.access(self.confdir, os.F_OK):
-            os.mkdir(self.confdir)
-        
-        if os.access(self.conffile, os.F_OK):
-            with open(self.conffile) as conf:
-                inp = json.loads(conf.read())
-            self.realm = inp['realm']
-            self.username = inp['username']
-            self.password = inp['password']
-
-    def flush(self):
-        out = {
-            'realm': self.realm,
-            'username': self.username,
-            'password': self.password,
-        }
-        with open(self.conffile, 'w') as conf:
-            conf.write(json.dumps(out))
-
-
-class LDAP(object):
-    """
-    Helper for AD LDAP related operations
-    """
-
-    def __init__(self, realm):
-        self.realm = realm
-
-    def base_dn(self):
-        return ','.join('dc=' + x for x in self.realm.split('.'))
-
-    def search(self, query='(objectCLass=*)', attributes=[]):
-        base = self.base_dn()
-        command = ['ldapsearch', '-N', '-LLL', '-b', base, query] + attributes
-        try:
-            output = subprocess.check_output(command)
-        except subprocess.CalledProcessError:
-            raise RuntimeError
-
-        # Filter out blank lines or comments
-        output = [x for x in output.split("\n") if re.match(r'[\w\d-]+:', x)]
-
-        # Return a dictionary of key/value pairs
-        return dict([tuple(x.split(': ', 1)) for x in output])
-
-    @staticmethod
-    def datetime_fromtimestamp(timestamp):
-        """
-        Converts LDAP timestamps into a datetime object
-        """
-
-        ldap_epoch = datetime(1601, 1, 1)
-        unix_epoch = datetime(1970, 1, 1)
-
-        # LDAP timestamps are in units of 100 nano-seconds, so scale up to seconds
-        timestamp /= 10000000
-
-        # Return the timestamp less the difference between the two epochs
-        return datetime.fromtimestamp(timestamp) - (unix_epoch - ldap_epoch)
+from adpasswd.configuration import Configuration
+from adpasswd.dnshelper import DNS
+from adpasswd.kerberos import KerberosTickets
+from adpasswd.ldap import LDAP
 
 
 class StartDialog(object):
@@ -206,7 +21,7 @@ class StartDialog(object):
     Startup dialog responsible for ephemeral configuration
     """
 
-    def submit(self, widget, data=None):
+    def submit(self, _widget, _data=None):
         """Commit text fields, destroy the window and continue execution"""
 
         # Write out the new configuration
@@ -219,12 +34,14 @@ class StartDialog(object):
         self.window.destroy()
         gtk.main_quit()
 
-    def delete(self, widget, data=None):
+
+    def delete(self, _widget, _data=None):
         """Destroy the window cleanly and exit the application"""
 
         self.window.destroy()
         gtk.main_quit()
         sys.exit()
+
 
     def __init__(self, config):
         self.config = config
@@ -277,31 +94,45 @@ class StartDialog(object):
         self.window.show_all()
 
 
-    def main(self):
+    @staticmethod
+    def main():
+        """Run the GTK event loop"""
         gtk.main()
 
 
 class MainDialog(object):
+    """
+    Main dialog window showing the time remaining
+    """
 
-    def delete(self, widget, data=None):
+    def delete(self, _widget, _data=None):
         """Destroy the window cleanly and exit the application"""
         self.window.destroy()
         gtk.main_quit()
         sys.exit()
 
+
     def error(self, message):
+        """Report an error and update the application icon"""
         self.window.set_icon_from_file(resource_filename('adpasswd', 'icons/lock-error.png'))
         self.label.set_text(message)
 
+
     def warn(self, message):
+        """Report a warning and update the application icon"""
         self.window.set_icon_from_file(resource_filename('adpasswd', 'icons/lock-warn.png'))
         self.label.set_text(message)
 
-    def ok(self, message):
+
+    def good(self, message):
+        """Report a good health and update the application icon"""
         self.window.set_icon_from_file(resource_filename('adpasswd', 'icons/lock-ok.png'))
         self.label.set_text(message)
 
+
     def update(self):
+        """Update the application state"""
+
         # Initialise the ticketing engine
         tickets = KerberosTickets(self.config.realm, self.config.username, self.config.password)
 
@@ -319,13 +150,13 @@ class MainDialog(object):
         # Next get the LDAP SRV records for the realm
         try:
             servers = DNS.get_services('ldap', 'tcp', self.config.realm)
-        except DNSException:
+        except RuntimeError:
             self.error('Unable to query DNS')
             return True
 
         # Finally for each server, try get the user entry in LDAP
         for server in servers:
-            ldap = LDAP(self.config.realm)
+            ldap = LDAP(self.config.realm, server)
             query = '(sAMAccountName=' + self.config.username + ')'
             attributes = [
                 'msDS-UserPasswordExpiryTimeComputed',
@@ -345,10 +176,11 @@ class MainDialog(object):
         left = expires - datetime.now()
 
         # Report the freshness of the password
-        callback = self.warn if left < timedelta(7) else self.ok
+        callback = self.warn if left < timedelta(7) else self.good
         callback('Password expires in {}'.format(left))
 
         return True
+
 
     def __init__(self, config):
         self.config = config
@@ -374,12 +206,17 @@ class MainDialog(object):
         # Poll the AD server once every hour
         self.timer = gobject.timeout_add(60 * 60 * 1000, self.update)
 
-    def main(self):
+
+    @staticmethod
+    def main():
+        """Run the GTK eventloop"""
         gtk.main()
 
 
 
 def entry():
+    """Main entry point"""
+
     # Setup logging to standard out
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
