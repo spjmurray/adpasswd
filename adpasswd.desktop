@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Active Directory Password
+Exec=adpasswd
+Icon=/usr/local/lib/python2.7/dist-packages/adpasswd/icons/lock.png
+Type=Application
+Terminal=false
