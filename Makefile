@@ -6,11 +6,12 @@ all:
 
 install:
 	tar xf dist/$(PACKAGE)-$(VERSION).linux-x86_64.tar.gz -C /
-	sudo cp adpasswd.desktop /usr/share/applications
+	# Sadly this overrides dynamic icon updates
+	# sudo cp adpasswd.desktop /usr/share/applications
 
 uninstall:
 	rm -rf /usr/local/lib/python2.7/dist-packages/$(PACKAGE)*
-	sudo rm /usr/share/applications/adpasswd.desktop
+	# sudo rm /usr/share/applications/adpasswd.desktop
 
 clean:
 	rm -rf adpasswd.egg-info build dist
