@@ -21,28 +21,6 @@ class StartDialog(object):
     Startup dialog responsible for ephemeral configuration
     """
 
-    def submit(self, _widget, _data=None):
-        """Commit text fields, destroy the window and continue execution"""
-
-        # Write out the new configuration
-        self.config.realm = self.realm_widget.get_text()
-        self.config.username = self.username_widget.get_text()
-        self.config.password = self.password_widget.get_text()
-        self.config.flush()
-
-        # Destroy the window and leave the event loop
-        self.window.destroy()
-        gtk.main_quit()
-
-
-    def delete(self, _widget, _data=None):
-        """Destroy the window cleanly and exit the application"""
-
-        self.window.destroy()
-        gtk.main_quit()
-        sys.exit()
-
-
     def __init__(self, config):
         self.config = config
 
@@ -55,6 +33,11 @@ class StartDialog(object):
 
         # Contains a vertical box of widgets
         vbox = gtk.VBox(False, 0)
+
+        label = gtk.Label('')
+        label.set_markup('<b>Please enter your AD credentials</b>')
+        label.set_line_wrap(True)
+        vbox.pack_start(label, False, False, 0)
 
         # First is a table of labels to text fields
         table = gtk.Table(3, 2, False)
@@ -87,15 +70,37 @@ class StartDialog(object):
         self.button = gtk.Button('Submit')
         self.button.connect('clicked', self.submit, None)
 
-        vbox.pack_start(table, False, False, 0)
-        vbox.pack_start(self.button, False, False, 5)
+        vbox.pack_start(table, False, False, 10)
+        vbox.pack_start(self.button, False, False, 0)
 
         self.window.add(vbox)
         self.window.show_all()
 
 
+    def submit(self, _widget, _data=None):
+        """Commit text fields, destroy the window and continue execution"""
+
+        # Write out the new configuration
+        self.config.realm = self.realm_widget.get_text()
+        self.config.username = self.username_widget.get_text()
+        self.config.password = self.password_widget.get_text()
+        self.config.flush()
+
+        # Destroy the window and leave the event loop
+        self.window.destroy()
+        gtk.main_quit()
+
+
+    def delete(self, _widget, _data=None):
+        """Destroy the window cleanly and exit the application"""
+
+        self.window.destroy()
+        gtk.main_quit()
+        sys.exit()
+
+
     @staticmethod
-    def main():
+    def run():
         """Run the GTK event loop"""
         gtk.main()
 
@@ -104,6 +109,31 @@ class MainDialog(object):
     """
     Main dialog window showing the time remaining
     """
+
+    def __init__(self, config):
+        self.config = config
+
+        # Create the basic main window
+        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        self.window.set_title('AD Password')
+        self.window.set_icon_from_file(resource_filename('adpasswd', 'icons/lock.png'))
+        self.window.set_border_width(10)
+        self.window.connect('delete_event', self.delete)
+
+        self.label = gtk.Label('Initializing ...')
+
+        self.window.add(self.label)
+
+        # Get an initial status
+        self.update()
+
+        # Show the window (in particular the icon) and minimise the window
+        self.window.show_all()
+        self.window.iconify()
+
+        # Poll the AD server once every hour
+        self.timer = gobject.timeout_add(60 * 60 * 1000, self.update)
+
 
     def delete(self, _widget, _data=None):
         """Destroy the window cleanly and exit the application"""
@@ -182,33 +212,8 @@ class MainDialog(object):
         return True
 
 
-    def __init__(self, config):
-        self.config = config
-
-        # Create the basic main window
-        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        self.window.set_title('AD Password')
-        self.window.set_icon_from_file(resource_filename('adpasswd', 'icons/lock.png'))
-        self.window.set_border_width(10)
-        self.window.connect('delete_event', self.delete)
-
-        self.label = gtk.Label('Initializing ...')
-
-        self.window.add(self.label)
-
-        # Get an initial status
-        self.update()
-
-        # Show the window (in particular the icon) and minimise the window
-        self.window.show_all()
-        self.window.iconify()
-
-        # Poll the AD server once every hour
-        self.timer = gobject.timeout_add(60 * 60 * 1000, self.update)
-
-
     @staticmethod
-    def main():
+    def run():
         """Run the GTK eventloop"""
         gtk.main()
 
@@ -225,11 +230,11 @@ def entry():
 
     # Fire up the initial dialog for configuration
     dialog = StartDialog(config)
-    dialog.main()
+    dialog.run()
 
     # Fire up the main dialog window
     main = MainDialog(config)
-    main.main()
+    main.run()
 
 
 # vi: ts=4 et:
