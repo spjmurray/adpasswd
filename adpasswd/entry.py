@@ -202,11 +202,15 @@ class MainDialog(object):
 
         # Convert the expiry time from LDAP into UNIX, and work out the time left
         expiry = int(result['msDS-UserPasswordExpiryTimeComputed'])
+        if expiry == 0x7fffffffffffffff:
+            self.good('Password never expires')
+            return True
+
         expires = LDAP.datetime_fromtimestamp(expiry)
         left = expires - datetime.now()
 
         # Report the freshness of the password
-        callback = self.warn if left < timedelta(7) else self.good
+        callback = self.warn if left < timedelta(14) else self.good
         callback('Password expires in {}'.format(left))
 
         return True
