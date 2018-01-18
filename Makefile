@@ -5,7 +5,7 @@ all:
 	./setup.py bdist
 
 install:
-	tar xf dist/$(PACKAGE)-$(VERSION).linux-x86_64.tar.gz -C /
+	tar xf dist/$(PACKAGE)-$(VERSION).linux-x86_64.tar.gz -C / --no-same-owner
 	# Sadly this overrides dynamic icon updates
 	# sudo cp adpasswd.desktop /usr/share/applications
 
