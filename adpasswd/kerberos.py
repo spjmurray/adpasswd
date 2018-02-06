@@ -3,6 +3,7 @@ Placeholder
 """
 
 import datetime
+import json
 import logging
 import re
 import subprocess
@@ -55,25 +56,24 @@ class KerberosTickets(object):
         self.tickets = []
 
         # Run klist to grab the current tickets the system knows about
-        command = ['/usr/bin/klist']
+        command = ['/usr/bin/klist', '--json']
         try:
             output = subprocess.check_output(command)
         except subprocess.CalledProcessError:
             logging.warn('Call to klist failed')
             return
+        output = json.loads(output)
 
         # Parse existing tickets discarding any expired ones e.g.
         # Jan 10 15:48:00 2018  >>>Expired<<<  krbtgt/CORP.COUCHBASE.COM@CORP.COUCHBASE.COM
-        entries = output.split("\n")[4:-1]
-        for entry in entries:
-            issued, expires, principal = re.split(r'\s{2,}', entry)
-            issued = datetime.datetime.strptime(issued, self.date_format)
+        for ticket in output['tickets']:
+            issued = datetime.datetime.strptime(ticket['Issued'], self.date_format)
             try:
-                expires = datetime.datetime.strptime(expires, self.date_format)
+                expires = datetime.datetime.strptime(ticket['Expires'], self.date_format)
             except ValueError:
                 # This effectively ignores tickets that have expired
                 continue
-            ticket = KerberosTicket(issued, expires, principal)
+            ticket = KerberosTicket(issued, expires, ticket['Principal'])
             self.tickets.append(ticket)
 
         if not self.tickets:
