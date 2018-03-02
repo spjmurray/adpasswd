@@ -64,6 +64,10 @@ class KerberosTickets(object):
             return
         output = json.loads(output)
 
+        if 'tickets' not in output:
+            logging.info('No tickets or ticket file found')
+            return
+
         # Parse existing tickets discarding any expired ones e.g.
         # Jan 10 15:48:00 2018  >>>Expired<<<  krbtgt/CORP.COUCHBASE.COM@CORP.COUCHBASE.COM
         for ticket in output['tickets']:
