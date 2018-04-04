@@ -21,3 +21,9 @@ outs.
 ## Building
 
     make && make install
+
+## Running
+
+To run from the local console simply execute:
+
+    adpasswd --daemonize

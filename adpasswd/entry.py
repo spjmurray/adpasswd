@@ -2,8 +2,10 @@
 Placeholder
 """
 
+import argparse
 from datetime import datetime, timedelta
 import logging
+import os
 import sys
 
 import gtk
@@ -222,9 +224,48 @@ class MainDialog(object):
         gtk.main()
 
 
+def daemonize():
+    """Detach from the parent process and run as a daemon"""
+
+    # Fork and exit from the parent
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+
+    # Become the session and proccess group leader
+    os.setsid()
+
+    # Exit the session leader
+    pid = os.fork()
+    if pid > 0:
+        sys.exit()
+
+    # Change to root so we aren't dependant on a mounted file system
+    os.chdir('/')
+
+    # Allow open/creat to provide their own masks uncoupled from the parent
+    os.umask(0)
+
+    # Close all standard file descriptors and replace with null versions
+    stdin = file('/dev/null', 'r')
+    stdout = file('/dev/null', 'a+')
+    stderr = file('/dev/null', 'a+', 0)
+    os.dup2(stdin.fileno(), sys.stdin.fileno())
+    os.dup2(stdout.fileno(), sys.stdout.fileno())
+    os.dup2(stderr.fileno(), sys.stderr.fileno())
+
 
 def entry():
     """Main entry point"""
+
+    # Parse command line parameters
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--daemonize', default=False, action='store_true')
+    args = parser.parse_args()
+
+    # Deamonize if we should
+    if args.daemonize:
+        daemonize()
 
     # Setup logging to standard out
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
