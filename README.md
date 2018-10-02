@@ -9,8 +9,9 @@ outs.
 
 ### System Binaries
 
-* Kerberos 5
-* OpenLDAP Tools
+* heimdal-clients
+* ldap-utils
+* libsasl2-modules-gssapi-mit
 
 ### Python Libraries
 
